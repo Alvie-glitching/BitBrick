@@ -166,7 +166,7 @@
     <section>
       <h2>Exportar</h2>
       <div class="row"><label for="name">Nombre</label></div>
-      <div class="row"><input id="name" type="text" value="fabrica"></div>
+      <div class="row"><input id="name" type="text" value="dibujo"></div>
       <div class="row">
         <label for="scale">Píxeles por cuadrado</label>
         <input id="scale" type="number" min="1" max="64" value="8">
@@ -624,9 +624,9 @@
   }
 
   // ---------- init ----------
+  // First run: blank 32 x 32 canvas. The example is available from the import panel.
   if (!restore()) {
-    const p = parseText(EXAMPLE);
-    W = p.w; H = p.h; cells = p.cells; $('name').value = p.name;
+    W = 32; H = 32; cells = new Uint8Array(W * H); $('name').value = 'dibujo';
   }
   syncSizeInputs();
   window.addEventListener('resize', layout);
