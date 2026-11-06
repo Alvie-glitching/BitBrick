@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitBrick</title>
+<style>
+  :root {
+    --bg: #15171b;
+    --panel: #1e2026;
+    --panel-2: #262932;
+    --line: #33363f;
+    --text: #e4e1da;
+    --muted: #8d8f96;
+    --accent: #cdb083;
+    --accent-ink: #1e2026;
+    --danger: #d0786b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 12px 18px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: .04em; color: var(--accent); }
+  header span { color: var(--muted); font-size: 12px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  aside {
+    width: 290px; flex-shrink: 0; overflow-y: auto;
+    border-right: 1px solid var(--line); background: var(--panel);
+    padding: 14px;
+  }
+  section { margin-bottom: 18px; }
+  section h2 {
+    margin: 0 0 8px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+  }
+  .row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  label { color: var(--muted); font-size: 12px; }
+  input[type=number], input[type=text], textarea, select {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 7px; font: inherit; font-size: 13px;
+  }
+  input[type=number] { width: 64px; }
+  input[type=text] { width: 100%; }
+  input[type=color] {
+    width: 36px; height: 28px; padding: 0; border: 1px solid var(--line);
+    border-radius: 6px; background: none; cursor: pointer;
+  }
+  textarea { width: 100%; height: 110px; resize: vertical; font-size: 11px; line-height: 1.15; }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .check { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text); cursor: pointer; }
+  .stage {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 18px; gap: 10px;
+    position: relative;
+  }
+  #board-wrap { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  #board { image-rendering: pixelated; touch-action: none; cursor: crosshair; box-shadow: 0 0 0 1px var(--line); }
+  .status { color: var(--muted); font-size: 12px; display: flex; gap: 16px; }
+  #preview-box {
+    position: absolute; right: 18px; top: 18px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px; text-align: center;
+  }
+  #preview-box canvas { image-rendering: pixelated; display: block; margin: 0 auto 4px; }
+  #preview-box span { font-size: 10px; color: var(--muted); }
+  #toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    background: var(--panel-2); border: 1px solid var(--accent); color: var(--text);
+    padding: 8px 14px; border-radius: 8px; font-size: 12px;
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #fallback {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7);
+    display: none; align-items: center; justify-content: center; z-index: 10;
+  }
+  #fallback.show { display: flex; }
+  #fallback .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; max-width: 90vw; max-height: 90vh; overflow: auto; text-align: center;
+  }
+  #fallback img { max-width: 70vw; max-height: 60vh; image-rendering: pixelated; background: repeating-conic-gradient(#2a2d35 0 25%, #22252c 0 50%) 0 0/16px 16px; }
+  #fallback p { color: var(--muted); font-size: 12px; }
+  .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  @media (max-width: 760px) {
+    main { flex-direction: column-reverse; }
+    aside { width: 100%; border-right: 0; border-top: 1px solid var(--line); max-height: 45vh; }
+    #preview-box { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>BitBrick</h1>
+  <span>lienzo de cuadrados · exporta PNG, JPG o TXT</span>
+</header>
+<main>
+  <aside>
+    <section>
+      <h2>Superficie</h2>
+      <div class="row">
+        <label for="w">Ancho</label><input id="w" type="number" min="1" max="256" value="32">
+        <label for="h">Alto</label><input id="h" type="number" min="1" max="256" value="32">
+      </div>
+      <div class="row">
+        <button id="apply-size" class="primary">Aplicar tamaño</button>
+      </div>
+      <div class="hint">Al cambiar el tamaño se conserva el dibujo desde la esquina superior izquierda.</div>
+    </section>
+
+    <section>
+      <h2>Colores</h2>
+      <div class="row">
+        <input id="c-on" type="color" value="#cdb083"><label for="c-on">Activado</label>
+        <input id="c-off" type="color" value="#1e2026"><label for="c-off">Desactivado</label>
+      </div>
+      <div class="row">
+        <label class="check"><input id="show-grid" type="checkbox" checked> Mostrar cuadrícula</label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Herramientas</h2>
+      <div class="grid3">
+        <button data-tool="pen" class="on" title="Lápiz (B)">Lápiz</button>
+        <button data-tool="eraser" title="Borrador (E)">Borrador</button>
+        <button data-tool="fill" title="Relleno (F)">Relleno</button>
+      </div>
+      <div class="hint">El lápiz alterna: si empiezas sobre un cuadrado activado, el trazo lo desactiva. Clic derecho siempre borra.</div>
+      <div class="grid3" style="margin-top:8px">
+        <button id="undo" title="Ctrl+Z">Deshacer</button>
+        <button id="redo" title="Ctrl+Y">Rehacer</button>
+        <button id="invert">Invertir</button>
+        <button id="flip-h">Espejo ↔</button>
+        <button id="flip-v">Espejo ↕</button>
+        <button id="clear" class="danger">Limpiar</button>
+      </div>
+      <div class="grid2" style="margin-top:6px">
+        <button id="shift-l">Mover ←</button>
+        <button id="shift-r">Mover →</button>
+        <button id="shift-u">Mover ↑</button>
+        <button id="shift-d">Mover ↓</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Exportar</h2>
+      <div class="row"><label for="name">Nombre</label></div>
+      <div class="row"><input id="name" type="text" value="fabrica"></div>
+      <div class="row">
+        <label for="scale">Píxeles por cuadrado</label>
+        <input id="scale" type="number" min="1" max="64" value="8">
+      </div>
+      <div class="row">
+        <label class="check"><input id="transparent" type="checkbox"> Fondo transparente (solo PNG)</label>
+      </div>
+      <div class="row">
+        <label class="check"><input id="export-grid" type="checkbox"> Incluir líneas de cuadrícula</label>
+      </div>
+      <div class="grid3">
+        <button id="exp-png" class="primary">PNG</button>
+        <button id="exp-jpg" class="primary">JPG</button>
+        <button id="exp-txt" class="primary">TXT</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="copy-txt">Copiar TXT al portapapeles</button>
+      </div>
+      <div class="hint" id="out-size"></div>
+    </section>
+
+    <section>
+      <h2>Importar TXT</h2>
+      <div class="row">
+        <input id="file" type="file" accept=".txt,text/plain" style="font-size:11px;width:100%">
+      </div>
+      <textarea id="paste" placeholder="…o pega aquí el texto (X = activado, . = desactivado)"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="load-paste">Cargar texto pegado</button>
+        <button id="load-example">Ejemplo: fábrica</button>
+      </div>
+      <div class="hint">Las líneas que empiezan con # se ignoran. Cualquier carácter distinto de . espacio 0 o _ cuenta como activado.</div>
+    </section>
+  </aside>
+
+  <div class="stage">
+    <div id="board-wrap"><canvas id="board"></canvas></div>
+    <div class="status">
+      <span id="st-size"></span>
+      <span id="st-pos">—</span>
+      <span id="st-count"></span>
+    </div>
+    <div id="preview-box">
+      <canvas id="preview"></canvas>
+      <span>vista previa</span>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<div id="fallback">
+  <div class="card">
+    <div id="fb-body"></div>
+    <p id="fb-msg"></p>
+    <button id="fb-close">Cerrar</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const EXAMPLE = `# Ícono fabrica (32 x 32). X = silueta; . = fondo del recuadro.
+................................
+................................
+................................
+................................
+.......................XXXX.....
+.......................XXXX.....
+................................
+.......................XXXX.....
+.......................XXXX.....
+.......................XXXX.....
+.......................XXXX.....
+...X......X......X.....XXXX.....
+...XX.....XX.....XX....XXXX.....
+...XXX....XXX....XXX...XXXX.....
+...XXXX...XXXX...XXXX..XXXX.....
+...XXXXX..XXXXX..XXXXX.XXXX.....
+...XXXXXX.XXXXXX.XXXXXXXXXX.....
+...XXXXXXXXXXXXXXXXXXXXXXXX.....
+...XXXXXXXXXXXXXXXXXXXXXXXXXX...
+...XXXXXXXXXXXXXXXXXXXXXXXXXX...
+...XX..XX..XXXXXXXXXX..XX..XX...
+...XX..XX..X........X..XX..XX...
+...XX..XX..XXXXXXXXXX..XX..XX...
+...XXXXXXXXX........XXXXXXXXX...
+...XXXXXXXXXXXXXXXXXXXXXXXXXX...
+...XXXXXXXXX........XXXXXXXXX...
+...XXXXXXXXXXXXXXXXXXXXXXXXXX...
+...XXXXXXXXX........XXXXXXXXX...
+...XXXXXXXXX........XXXXXXXXX...
+.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.
+.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.
+................................`;
+
+  const $ = (id) => document.getElementById(id);
+  const board = $('board'), ctx = board.getContext('2d');
+  const preview = $('preview'), pctx = preview.getContext('2d');
+
+  let W = 32, H = 32;
+  let cells = new Uint8Array(W * H);
+  let tool = 'pen';
+  let undoStack = [], redoStack = [];
+  const MAX_UNDO = 200;
+
+  // ---------- storage (optional convenience) ----------
+  const STORE_KEY = 'bitbrick.v1';
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        W, H, cells: toText(false), on: $('c-on').value, off: $('c-off').value,
+        name: $('name').value, scale: $('scale').value, grid: $('show-grid').checked
+      }));
+    } catch (e) {}
+  }
+  function restore() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return false;
+      const s = JSON.parse(raw);
+      $('c-on').value = s.on || '#cdb083';
+      $('c-off').value = s.off || '#1e2026';
+      $('name').value = s.name || 'dibujo';
+      $('scale').value = s.scale || 8;
+      $('show-grid').checked = s.grid !== false;
+      const parsed = parseText(s.cells);
+      if (!parsed) return false;
+      W = s.W; H = s.H; cells = parsed.cells;
+      if (parsed.w !== W || parsed.h !== H) { W = parsed.w; H = parsed.h; }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // ---------- history ----------
+  function snapshot() { return { W, H, cells: cells.slice() }; }
+  function pushUndo() {
+    undoStack.push(snapshot());
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = [];
+  }
+  function restoreSnap(s) { W = s.W; H = s.H; cells = s.cells.slice(); syncSizeInputs(); layout(); }
+  function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); restoreSnap(undoStack.pop()); changed(); }
+  function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); restoreSnap(redoStack.pop()); changed(); }
+
+  // ---------- grid ops ----------
+  const idx = (x, y) => y * W + x;
+  const inBounds = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+
+  function resize(nw, nh) {
+    const next = new Uint8Array(nw * nh);
+    for (let y = 0; y < Math.min(H, nh); y++)
+      for (let x = 0; x < Math.min(W, nw); x++)
+        next[y * nw + x] = cells[idx(x, y)];
+    W = nw; H = nh; cells = next;
+  }
+  function floodFill(sx, sy, value) {
+    const target = cells[idx(sx, sy)];
+    if (target === value) return;
+    const stack = [[sx, sy]];
+    while (stack.length) {
+      const [x, y] = stack.pop();
+      if (!inBounds(x, y) || cells[idx(x, y)] !== target) continue;
+      cells[idx(x, y)] = value;
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+  }
+  function transform(fn) {
+    pushUndo();
+    const next = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const [ox, oy] = fn(x, y);
+      next[idx(x, y)] = inBounds(ox, oy) ? cells[idx(ox, oy)] : 0;
+    }
+    cells = next; changed();
+  }
+
+  // ---------- text format ----------
+  function toText(withHeader = true) {
+    const rows = [];
+    if (withHeader) {
+      const name = ($('name').value || 'dibujo').trim();
+      rows.push(`# Ícono ${name} (${W} x ${H}). X = silueta; . = fondo del recuadro.`);
+    }
+    for (let y = 0; y < H; y++) {
+      let r = '';
+      for (let x = 0; x < W; x++) r += cells[idx(x, y)] ? 'X' : '.';
+      rows.push(r);
+    }
+    return rows.join('\n') + '\n';
+  }
+  function parseText(text) {
+    if (!text) return null;
+    const lines = text.replace(/\r/g, '').split('\n');
+    let name = null, hw = null, hh = null;
+    const rows = [];
+    for (const line of lines) {
+      if (line.trim().startsWith('#')) {
+        const m = line.match(/Ícono\s+(.+?)\s*\((\d+)\s*x\s*(\d+)\)/i);
+        if (m) { name = m[1]; hw = +m[2]; hh = +m[3]; }
+        continue;
+      }
+      rows.push(line.replace(/\s+$/, ''));
+    }
+    while (rows.length && rows[rows.length - 1] === '') rows.pop();
+    while (rows.length && rows[0] === '' && hh == null) rows.shift();
+    if (!rows.length) return null;
+    const w = Math.min(256, Math.max(1, hw || Math.max(...rows.map(r => r.length))));
+    const h = Math.min(256, Math.max(1, hh || rows.length));
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < Math.min(h, rows.length); y++)
+      for (let x = 0; x < Math.min(w, rows[y].length); x++)
+        out[y * w + x] = '. 0_'.includes(rows[y][x]) ? 0 : 1;
+    return { w, h, cells: out, name };
+  }
+  function loadText(text) {
+    const p = parseText(text);
+    if (!p) { toast('No encontré filas de dibujo en ese texto.'); return; }
+    pushUndo();
+    W = p.w; H = p.h; cells = p.cells;
+    if (p.name) $('name').value = p.name;
+    syncSizeInputs(); layout(); changed();
+    toast(`Cargado: ${W} × ${H}`);
+  }
+
+  // ---------- rendering ----------
+  let cell = 16;
+  function layout() {
+    const wrap = $('board-wrap');
+    const availW = wrap.clientWidth - 4, availH = wrap.clientHeight - 4;
+    cell = Math.max(2, Math.floor(Math.min(availW / W, availH / H)));
+    const dpr = window.devicePixelRatio || 1;
+    board.style.width = (W * cell) + 'px';
+    board.style.height = (H * cell) + 'px';
+    board.width = Math.round(W * cell * dpr);
+    board.height = Math.round(H * cell * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  function paint(c, size, opts) {
+    const { on, off, grid, transparent } = opts;
+    const cw = W * size, ch = H * size;
+    if (transparent) c.clearRect(0, 0, cw, ch);
+    else { c.fillStyle = off; c.fillRect(0, 0, cw, ch); }
+    c.fillStyle = on;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+      if (cells[idx(x, y)]) c.fillRect(x * size, y * size, size, size);
+    if (grid && size >= 4) {
+      c.strokeStyle = gridColor(off);
+      c.lineWidth = 1;
+      c.beginPath();
+      for (let x = 1; x < W; x++) { c.moveTo(x * size + .5, 0); c.lineTo(x * size + .5, ch); }
+      for (let y = 1; y < H; y++) { c.moveTo(0, y * size + .5); c.lineTo(cw, y * size + .5); }
+      c.stroke();
+    }
+  }
+  function gridColor(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.5 ? 'rgba(0,0,0,.18)' : 'rgba(255,255,255,.10)';
+  }
+  function draw() {
+    paint(ctx, cell, { on: $('c-on').value, off: $('c-off').value, grid: $('show-grid').checked, transparent: false });
+    drawPreview();
+    $('st-size').textContent = `${W} × ${H}`;
+    let n = 0; for (const v of cells) n += v;
+    $('st-count').textContent = `${n} activados`;
+    const s = getScale();
+    $('out-size').textContent = `Imagen exportada: ${W * s} × ${H * s} px`;
+  }
+  function drawPreview() {
+    const maxSide = 96;
+    const s = Math.max(1, Math.floor(maxSide / Math.max(W, H)));
+    preview.width = W * s; preview.height = H * s;
+    paint(pctx, s, { on: $('c-on').value, off: $('c-off').value, grid: false, transparent: false });
+  }
+  function changed() { draw(); save(); }
+
+  // ---------- pointer drawing ----------
+  let drawing = false, drawValue = 1, last = null;
+  function cellAt(e) {
+    const r = board.getBoundingClientRect();
+    return [Math.floor((e.clientX - r.left) / cell), Math.floor((e.clientY - r.top) / cell)];
+  }
+  function setCell(x, y, v) { if (inBounds(x, y)) cells[idx(x, y)] = v; }
+  function line(x0, y0, x1, y1, v) {
+    const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (;;) {
+      setCell(x0, y0, v);
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  }
+  board.addEventListener('contextmenu', (e) => e.preventDefault());
+  board.addEventListener('pointerdown', (e) => {
+    const [x, y] = cellAt(e);
+    if (!inBounds(x, y)) return;
+    const erase = e.button === 2 || tool === 'eraser';
+    pushUndo();
+    if (tool === 'fill' && e.button !== 2) { floodFill(x, y, 1); changed(); return; }
+    // Pen toggles: a stroke that starts on an active cell erases, otherwise it paints.
+    drawing = true; drawValue = erase ? 0 : (cells[idx(x, y)] ? 0 : 1); last = [x, y];
+    board.setPointerCapture(e.pointerId);
+    setCell(x, y, drawValue); draw();
+  });
+  board.addEventListener('pointermove', (e) => {
+    const [x, y] = cellAt(e);
+    $('st-pos').textContent = inBounds(x, y) ? `x ${x + 1}, y ${y + 1}` : '—';
+    if (!drawing) return;
+    line(last[0], last[1], x, y, drawValue);
+    last = [x, y]; draw();
+  });
+  const stop = () => { if (drawing) { drawing = false; save(); } };
+  board.addEventListener('pointerup', stop);
+  board.addEventListener('pointercancel', stop);
+  board.addEventListener('pointerleave', () => { $('st-pos').textContent = '—'; });
+
+  // ---------- controls ----------
+  function syncSizeInputs() { $('w').value = W; $('h').value = H; }
+  function setTool(t) {
+    tool = t;
+    document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  }
+  document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+  $('apply-size').addEventListener('click', () => {
+    const nw = clampInt($('w').value, 1, 256), nh = clampInt($('h').value, 1, 256);
+    if (nw === W && nh === H) return;
+    pushUndo(); resize(nw, nh); syncSizeInputs(); layout(); changed();
+  });
+  ['c-on', 'c-off', 'show-grid'].forEach(id => $(id).addEventListener('input', changed));
+  ['scale', 'name'].forEach(id => $(id).addEventListener('input', () => { draw(); save(); }));
+  $('undo').addEventListener('click', undo);
+  $('redo').addEventListener('click', redo);
+  $('invert').addEventListener('click', () => { pushUndo(); cells = cells.map(v => v ? 0 : 1); changed(); });
+  $('clear').addEventListener('click', () => { pushUndo(); cells = new Uint8Array(W * H); changed(); });
+  $('flip-h').addEventListener('click', () => transform((x, y) => [W - 1 - x, y]));
+  $('flip-v').addEventListener('click', () => transform((x, y) => [x, H - 1 - y]));
+  $('shift-l').addEventListener('click', () => transform((x, y) => [x + 1, y]));
+  $('shift-r').addEventListener('click', () => transform((x, y) => [x - 1, y]));
+  $('shift-u').addEventListener('click', () => transform((x, y) => [x, y + 1]));
+  $('shift-d').addEventListener('click', () => transform((x, y) => [x, y - 1]));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea')) return;
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    else if (k === 'b') setTool('pen');
+    else if (k === 'e') setTool('eraser');
+    else if (k === 'f') setTool('fill');
+  });
+
+  $('file').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    loadText(await f.text());
+    e.target.value = '';
+  });
+  $('load-paste').addEventListener('click', () => loadText($('paste').value));
+  $('load-example').addEventListener('click', () => loadText(EXAMPLE));
+
+  // ---------- export ----------
+  function clampInt(v, lo, hi) { v = parseInt(v, 10); return isNaN(v) ? lo : Math.min(hi, Math.max(lo, v)); }
+  function getScale() { return clampInt($('scale').value, 1, 64); }
+  function fileBase() {
+    return (($('name').value || 'dibujo').trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^\w\-]+/g, '_') || 'dibujo');
+  }
+  function renderExport(type) {
+    const s = getScale();
+    const c = document.createElement('canvas');
+    c.width = W * s; c.height = H * s;
+    const x = c.getContext('2d');
+    paint(x, s, {
+      on: $('c-on').value, off: $('c-off').value,
+      grid: $('export-grid').checked,
+      transparent: type === 'png' && $('transparent').checked
+    });
+    return c;
+  }
+  const canvasBlob = (c, mime) => new Promise(res => c.toBlob(res, mime, 0.95));
+
+  // Export strategy:
+  // - Hosted inside Claude (window.claude present): use the platform `downloads` capability.
+  // - Standalone (GitHub Pages, local file): use a regular browser download link.
+  // - If neither works: show the result in a dialog so it can be saved manually.
+  const hostedInClaude = !!(window.claude && typeof window.claude.use === 'function');
+  let downloads = null;
+  if (hostedInClaude) {
+    try { window.claude.use('downloads').then(d => { downloads = d; }).catch(() => {}); } catch (e) {}
+  }
+
+  function browserDownload(filename, data) {
+    try {
+      const blob = data instanceof Blob ? data : new Blob([data], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function offer(filename, data, fallbackHtml) {
+    if (!hostedInClaude) {
+      if (browserDownload(filename, data)) { toast(`Descargado: ${filename}`); return; }
+    } else if (downloads) {
+      try {
+        await downloads.save({ filename, data });
+        toast(`Guardado: ${filename}`);
+        return;
+      } catch (err) {
+        if (err && err.code === 'declined') { toast('Descarga cancelada.'); return; }
+        if (err && err.code === 'rate_limited') { toast('Ya hay una descarga pendiente; inténtalo en un momento.'); return; }
+      }
+    }
+    showFallback(fallbackHtml, filename);
+  }
+  function showFallback(html, filename) {
+    $('fb-body').innerHTML = html;
+    $('fb-msg').textContent = `La descarga directa no está disponible aquí. Guarda "${filename}" desde esta vista (clic derecho → Guardar imagen, o copia el texto).`;
+    $('fallback').classList.add('show');
+  }
+  $('fb-close').addEventListener('click', () => $('fallback').classList.remove('show'));
+
+  async function exportImage(type) {
+    const c = renderExport(type);
+    const mime = type === 'png' ? 'image/png' : 'image/jpeg';
+    const blob = await canvasBlob(c, mime);
+    const url = c.toDataURL(mime, 0.95);
+    await offer(`${fileBase()}.${type}`, blob, `<img src="${url}" alt="exportación">`);
+  }
+  $('exp-png').addEventListener('click', () => exportImage('png'));
+  $('exp-jpg').addEventListener('click', () => exportImage('jpg'));
+  $('exp-txt').addEventListener('click', () => {
+    const txt = toText(true);
+    const esc = txt.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    offer(`${fileBase()}.txt`, txt,
+      `<textarea readonly style="width:min(70vw,520px);height:50vh">${esc}</textarea>`);
+  });
+  $('copy-txt').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(toText(true)); toast('TXT copiado al portapapeles.'); }
+    catch (e) { $('paste').value = toText(true); $('paste').select(); toast('No pude copiar; el texto quedó seleccionado abajo.'); }
+  });
+
+  // ---------- toast ----------
+  let toastTimer;
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // ---------- init ----------
+  if (!restore()) {
+    const p = parseText(EXAMPLE);
+    W = p.w; H = p.h; cells = p.cells; $('name').value = p.name;
+  }
+  syncSizeInputs();
+  window.addEventListener('resize', layout);
+  requestAnimationFrame(layout);
+})();
+</script>
+</body>
+</html>
