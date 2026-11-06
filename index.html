@@ -198,7 +198,7 @@
         <button id="load-paste">Cargar texto pegado</button>
         <button id="load-example">Ejemplo: fábrica</button>
       </div>
-      <div class="hint">Las líneas que empiezan con # se ignoran. Cualquier carácter distinto de . espacio 0 o _ cuenta como activado.</div>
+      <div class="hint">Si el TXT trae datos de BitBrick (colores, píxeles por cuadrado, etc.) se aplican; si no, se usan los valores por defecto. Sin dimensiones en la cabecera, el tamaño es la línea más larga por el número de líneas (máximo 256). Cualquier carácter distinto de . espacio 0 o _ cuenta como activado.</div>
     </section>
   </aside>
 
@@ -344,11 +344,19 @@
   }
 
   // ---------- text format ----------
+  // Values used when a TXT file does not carry its own reconstruction data.
+  const DEFAULTS = { name: 'dibujo', on: '#cdb083', off: '#1e2026', scale: 8, transparent: false, grid: false };
+  const MAX_SIDE = 256;
+
   function toText(withHeader = true) {
     const rows = [];
     if (withHeader) {
-      const name = ($('name').value || 'dibujo').trim();
+      const name = ($('name').value || DEFAULTS.name).trim();
+      const yn = (b) => (b ? 'si' : 'no');
       rows.push(`# Ícono ${name} (${W} x ${H}). X = silueta; . = fondo del recuadro.`);
+      rows.push(`# BitBrick: color_activado=${$('c-on').value}; color_desactivado=${$('c-off').value}; ` +
+        `px_por_cuadrado=${getScale()}; fondo_transparente=${yn($('transparent').checked)}; ` +
+        `cuadricula=${yn($('export-grid').checked)}`);
     }
     for (let y = 0; y < H; y++) {
       let r = '';
@@ -357,38 +365,75 @@
     }
     return rows.join('\n') + '\n';
   }
+  // Reads the "# BitBrick: key=value; ..." line. Invalid or missing keys are left out,
+  // so the caller falls back to DEFAULTS for them.
+  function parseMeta(line) {
+    const meta = {};
+    const body = line.replace(/^\s*#\s*BitBrick:\s*/i, '');
+    for (const part of body.split(';')) {
+      const [rawKey, ...rest] = part.split('=');
+      if (!rawKey || !rest.length) continue;
+      const key = rawKey.trim().toLowerCase(), val = rest.join('=').trim().toLowerCase();
+      const isHex = /^#[0-9a-f]{6}$/.test(val);
+      const bool = val === 'si' || val === 'sí' ? true : val === 'no' ? false : null;
+      if (key === 'color_activado' && isHex) meta.on = val;
+      else if (key === 'color_desactivado' && isHex) meta.off = val;
+      else if (key === 'px_por_cuadrado' && /^\d+$/.test(val)) meta.scale = Math.min(64, Math.max(1, +val));
+      else if (key === 'fondo_transparente' && bool !== null) meta.transparent = bool;
+      else if (key === 'cuadricula' && bool !== null) meta.grid = bool;
+    }
+    return meta;
+  }
+
+  // Grid size rules:
+  // - Header with dimensions ("Ícono <name> (W x H)"): those dimensions are used.
+  // - No dimensions: width = longest line, height = number of lines (ragged lines are
+  //   padded with inactive cells). Both are capped at MAX_SIDE.
   function parseText(text) {
     if (!text) return null;
     const lines = text.replace(/\r/g, '').split('\n');
-    let name = null, hw = null, hh = null;
+    let name = null, hw = null, hh = null, meta = null;
     const rows = [];
     for (const line of lines) {
       if (line.trim().startsWith('#')) {
+        if (/^\s*#\s*BitBrick:/i.test(line)) { meta = parseMeta(line); continue; }
         const m = line.match(/Ícono\s+(.+?)\s*\((\d+)\s*x\s*(\d+)\)/i);
         if (m) { name = m[1]; hw = +m[2]; hh = +m[3]; }
         continue;
       }
-      rows.push(line.replace(/\s+$/, ''));
+      rows.push(line);
     }
+    // Empty lines at the start and end are not part of the drawing; lines with spaces are.
     while (rows.length && rows[rows.length - 1] === '') rows.pop();
-    while (rows.length && rows[0] === '' && hh == null) rows.shift();
+    while (rows.length && rows[0] === '') rows.shift();
     if (!rows.length) return null;
-    const w = Math.min(256, Math.max(1, hw || Math.max(...rows.map(r => r.length))));
-    const h = Math.min(256, Math.max(1, hh || rows.length));
+    const wantW = hw || Math.max(...rows.map(r => r.length));
+    const wantH = hh || rows.length;
+    const w = Math.min(MAX_SIDE, Math.max(1, wantW));
+    const h = Math.min(MAX_SIDE, Math.max(1, wantH));
     const out = new Uint8Array(w * h);
     for (let y = 0; y < Math.min(h, rows.length); y++)
       for (let x = 0; x < Math.min(w, rows[y].length); x++)
-        out[y * w + x] = '. 0_'.includes(rows[y][x]) ? 0 : 1;
-    return { w, h, cells: out, name };
+        out[y * w + x] = '. 0_\t'.includes(rows[y][x]) ? 0 : 1;
+    return { w, h, cells: out, name, meta, truncated: wantW > MAX_SIDE || wantH > MAX_SIDE };
   }
   function loadText(text) {
     const p = parseText(text);
     if (!p) { toast('No encontré filas de dibujo en ese texto.'); return; }
     pushUndo();
     W = p.w; H = p.h; cells = p.cells;
-    if (p.name) $('name').value = p.name;
+    const s = Object.assign({}, DEFAULTS, p.meta || {});
+    $('name').value = p.name || DEFAULTS.name;
+    $('c-on').value = s.on;
+    $('c-off').value = s.off;
+    $('scale').value = s.scale;
+    $('transparent').checked = s.transparent;
+    $('export-grid').checked = s.grid;
     syncSizeInputs(); layout(); changed();
-    toast(`Cargado: ${W} × ${H}`);
+    const origin = p.meta ? 'con sus datos' : 'con valores por defecto';
+    toast(p.truncated
+      ? `Cargado ${origin}: recortado a ${W} × ${H} (máximo ${MAX_SIDE})`
+      : `Cargado ${origin}: ${W} × ${H}`);
   }
 
   // ---------- rendering ----------

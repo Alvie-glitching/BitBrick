@@ -38,7 +38,7 @@ También están disponibles: **Invertir**, **Espejo ↔**, **Espejo ↕**, **Mov
 - **Píxeles por cuadrado:** tamaño de cada cuadrado en la imagen exportada (de 1 a 64). El panel muestra las dimensiones resultantes.
 - **Fondo transparente:** solo para PNG; los cuadrados desactivados quedan transparentes.
 - **Incluir líneas de cuadrícula:** dibuja la cuadrícula en la imagen.
-- **PNG**, **JPG** y **TXT** descargan el archivo. **Copiar TXT al portapapeles** copia el texto.
+- **PNG**, **JPG** y **TXT** descargan el archivo. El TXT guarda también los colores y las opciones de exportación, para que la misma imagen se pueda recrear igual en otro equipo. **Copiar TXT al portapapeles** copia el texto.
 
 ## Importar
 
@@ -49,12 +49,33 @@ También están disponibles: **Invertir**, **Espejo ↔**, **Espejo ↕**, **Mov
 
 ```
 # Ícono fabrica (32 x 32). X = silueta; . = fondo del recuadro.
+# BitBrick: color_activado=#cdb083; color_desactivado=#1e2026; px_por_cuadrado=8; fondo_transparente=no; cuadricula=no
 ................................
 ...X......X......X.....XXXX.....
 ```
 
-- Las líneas que empiezan con `#` son comentarios. Si la cabecera sigue el formato `Ícono <nombre> (<ancho> x <alto>)`, se toman el nombre y las dimensiones.
-- `X` = activado; `.` = desactivado. Al importar, cualquier carácter distinto de `.`, espacio, `0` o `_` cuenta como activado.
+**Cabecera**
+
+- `Ícono <nombre> (<ancho> x <alto>)`: nombre y dimensiones del dibujo.
+- `BitBrick: ...`: datos para reconstruir la misma imagen en cualquier lugar.
+
+| Clave | Valores | Por defecto |
+|---|---|---|
+| `color_activado` | color hexadecimal (`#rrggbb`) | `#cdb083` |
+| `color_desactivado` | color hexadecimal (`#rrggbb`) | `#1e2026` |
+| `px_por_cuadrado` | 1 a 64 | `8` |
+| `fondo_transparente` | `si` / `no` | `no` |
+| `cuadricula` | `si` / `no` | `no` |
+
+Si falta la línea `BitBrick:`, o alguna clave, o un valor no es válido, se usa el valor por defecto. Si falta el nombre, se usa `dibujo`.
+
+**Dibujo**
+
+- `X` = activado; `.` = desactivado. Al importar, cualquier carácter distinto de `.`, espacio, tabulación, `0` o `_` cuenta como activado.
+- Las demás líneas que empiezan con `#` son comentarios y se ignoran.
+- Si la cabecera trae dimensiones, se usan esas.
+- Si no las trae, el tamaño es la línea más larga por la cantidad de líneas. Las líneas más cortas se completan con cuadrados desactivados. Los espacios cuentan como contenido, y las líneas vacías al principio y al final se descartan.
+- El máximo es 256 × 256; lo que exceda se recorta.
 
 Ejemplo completo en [`ejemplos/fabrica.txt`](ejemplos/fabrica.txt).
 
